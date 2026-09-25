@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio de Pósters - Profesional</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- PDF.js para procesar PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Estilos personalizados */
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .bg-grid-pattern {
+            background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%), 
+                              linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #e2e8f0 75%), 
+                              linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-100 p-4 md:p-8 font-sans text-slate-800 relative">
+    
+    <!-- Notification System -->
+    <div id="notificationArea" class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-300 opacity-0 pointer-events-none -translate-y-4">
+        <div id="notificationBox" class="flex items-center gap-3 px-6 py-4 rounded-xl shadow-xl border backdrop-blur-md text-sm font-semibold text-white">
+            <i id="notifIcon" data-lucide="info" class="w-5 h-5"></i>
+            <span id="notifMessage">Mensaje</span>
+            <button onclick="hideNotify()" class="ml-4 hover:opacity-75">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="cropModal" class="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-sm flex-col items-center justify-center p-4 sm:p-8 hidden">
+        <div class="text-white text-center mb-6">
+            <h3 class="text-2xl font-bold mb-2">Recortar Imagen</h3>
+            <p class="text-slate-400">Haz clic y arrastra sobre la imagen para seleccionar el área que deseas conservar.</p>
+        </div>
+        <div class="relative max-w-full max-h-[60vh] bg-black shadow-2xl rounded-lg overflow-hidden touch-none select-none" id="cropContainer">
+            <img id="cropTargetImg" src="" alt="Para recortar" class="block max-w-full max-h-[60vh] object-contain opacity-60" draggable="false">
+            <div id="cropOverlayArea" class="absolute inset-0 cursor-crosshair">
+                <div id="cropSelection" class="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] pointer-events-none hidden">
+                    <div class="absolute inset-0 grid grid-cols-3 grid-rows-3 opacity-50">
+                        <div class="border-r border-b border-white/50"></div><div class="border-r border-b border-white/50"></div><div class="border-b border-white/50"></div>
+                        <div class="border-r border-b border-white/50"></div><div class="border-r border-b border-white/50"></div><div class="border-b border-white/50"></div>
+                        <div class="border-r border-white/50"></div><div class="border-r border-white/50"></div><div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-4 mt-8">
+            <button onclick="closeCropMode()" class="px-6 py-3 rounded-xl font-bold text-white bg-slate-700 hover:bg-slate-600 transition-colors">Cancelar</button>
+            <button onclick="applyCrop()" class="px-6 py-3 rounded-xl font-bold text-white bg-slate-800 hover:bg-slate-700 shadow-lg transition-colors flex items-center">
+                <i data-lucide="scissors" class="w-5 h-5 mr-2"></i> Aplicar Recorte
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto space-y-6 relative z-10">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div class="flex items-center space-x-4">
+                <div class="p-4 bg-slate-800 rounded-2xl shadow-md">
+                    <i data-lucide="layout-grid" class="text-white w-8 h-8"></i>
+                </div>
+                <div class="flex flex-col">
+                    <div class="inline-flex flex-col w-fit" style="font-family: Arial, Helvetica, sans-serif;">
+                        <h1 class="text-4xl md:text-5xl font-black tracking-tighter leading-none">
+                            <span class="text-[#E3182D]">G</span><span class="text-black">rafiplot</span>
+                        </h1>
+                        <span class="text-xl md:text-2xl font-bold text-black self-end leading-none -mt-1 tracking-tight">vasquez</span>
+                    </div>
+                    <p class="text-slate-500 font-medium text-sm md:text-base mt-2">- Creación de póster</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            <!-- CONTROLES (IZQUIERDA) -->
+            <div class="lg:col-span-4 bg-white p-6 md:p-8 rounded-3xl shadow-md border border-slate-200 h-fit">
+                
+                <!-- 1. Subir Trabajo -->
+                <div class="mb-8">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-bold text-xs">1</span>
+                            <label class="text-base font-bold text-slate-800">Cargar Trabajo</label>
+                        </div>
+                        <button id="btnClearAll" onclick="clearAll()" class="hidden text-xs font-bold text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Limpiar Trabajo
+                        </button>
+                    </div>
+                    <label class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-slate-400 transition-all group">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                            <div class="p-3 bg-white rounded-full shadow-sm group-hover:scale-105 transition-transform mb-2 text-slate-600 border border-slate-100">
+                                <i data-lucide="upload" class="w-6 h-6"></i>
+                            </div>
+                            <p class="text-sm text-slate-700 font-semibold">Subir imágenes o PDF</p>
+                        </div>
+                        <input type="file" multiple class="hidden" accept="image/*,application/pdf" id="fileInput">
+                    </label>
+
+                    <div id="thumbnailsContainer" class="flex gap-3 overflow-x-auto py-4 px-1 mt-2 custom-scrollbar hidden"></div>
+                </div>
+
+                <div class="w-full h-px bg-slate-200 mb-8"></div>
+
+                <div id="optionsPanel" class="opacity-40 grayscale pointer-events-none transition-all duration-500">
+                    
+                    <!-- 2. Ajuste del Papel -->
+                    <div class="mb-8">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-bold text-xs">2</span>
+                            <label class="text-base font-bold text-slate-800">Formato de Hoja</label>
+                        </div>
+                        <div class="flex flex-col gap-3">
+                            <select id="selectPaperSize" onchange="changePaperSize(this.value)" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-400">
+                                <option value="a4">A4 (21.0 x 29.7 cm)</option>
+                                <option value="a3">A3 (29.7 x 42.0 cm)</option>
+                                <option value="a2">A2 (42.0 x 59.4 cm)</option>
+                                <option value="a1">A1 (59.4 x 84.1 cm)</option>
+                                <option value="a0">A0 (84.1 x 118.9 cm)</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                            <div id="customPaperDimensions" class="hidden">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="relative">
+                                        <input type="number" id="customPaperWidth" value="21" min="1" step="0.1" class="w-full text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 focus:ring-2 focus:ring-slate-400 outline-none" title="Ancho de la hoja">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">cm</span>
+                                    </div>
+                                    <div class="relative">
+                                        <input type="number" id="customPaperHeight" value="29.7" min="1" step="0.1" class="w-full text-sm font-bold text-slate-800 bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 focus:ring-2 focus:ring-slate-400 outline-none" title="Alto de la hoja">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">cm</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex p-1 bg-slate-100 rounded-xl border border-slate-200/50">
+                                <button id="btnPortrait" class="flex-1 py-2 text-sm font-semibold rounded-lg transition-all bg-white shadow-sm text-slate-800">Vertical</button>
+                                <button id="btnLandscape" class="flex-1 py-2 text-sm font-semibold rounded-lg transition-all text-slate-500 hover:text-slate-700">Horizontal</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Dimensiones -->
+                    <div class="mb-8 space-y-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-bold text-xs">3</span>
+                            <label class="text-base font-bold text-slate-800">Dimensiones</label>
+                        </div>
+                        
+                        <div class="flex items-center p-2 bg-slate-50 rounded-xl border border-slate-200 gap-2">
+                            <div class="flex items-center space-x-2 flex-1">
+                                <input type="number" id="customCols" min="1" max="15" value="2" class="w-full text-center text-sm font-semibold border-slate-200 rounded-lg py-2 focus:ring-2 focus:ring-slate-400 outline-none" placeholder="Ancho">
+                                <span class="text-slate-400 font-bold">x</span>
+                                <input type="number" id="customRows" min="1" max="15" value="3" class="w-full text-center text-sm font-semibold border-slate-200 rounded-lg py-2 focus:ring-2 focus:ring-slate-400 outline-none" placeholder="Alto">
+                            </div>
+                            <button id="btnFitPages" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-slate-700 transition-all">Fijar Hojas</button>
+                        </div>
+
+                        <div class="p-5 bg-white rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Ajuste Manual (CM)</label>
+                                <button id="btnLockAspect" class="p-2 rounded-xl transition-colors bg-slate-100 text-slate-700" title="Bloquear proporción">
+                                    <i id="lockIcon" data-lucide="lock" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="relative">
+                                    <input type="number" id="inputWidth" value="0" class="w-full text-base font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-slate-500 outline-none transition-all">
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">cm</span>
+                                </div>
+                                <div class="relative">
+                                    <input type="number" id="inputHeight" value="0" class="w-full text-base font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-slate-500 outline-none transition-all">
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">cm</span>
+                                </div>
+                            </div>
+
+                            <div class="pt-3 border-t border-slate-200">
+                                <label class="text-xs font-bold text-slate-500 mb-3 block uppercase tracking-wider">Comportamiento en Canvas</label>
+                                <div class="grid grid-cols-3 gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                                    <button onclick="setFitMode('contain')" id="fitContain" class="fit-btn flex flex-col items-center py-2 rounded-lg text-xs font-bold transition-all bg-white shadow-sm text-slate-800 ring-1 ring-slate-200"><i data-lucide="image" class="w-5 h-5 mb-1"></i>Proporción</button>
+                                    <button onclick="setFitMode('cover')" id="fitCover" class="fit-btn flex flex-col items-center py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-700"><i data-lucide="crop" class="w-5 h-5 mb-1"></i>Rellenar</button>
+                                    <button onclick="setFitMode('fill')" id="fitFill" class="fit-btn flex flex-col items-center py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-700"><i data-lucide="stretch-horizontal" class="w-5 h-5 mb-1"></i>Estirar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full h-px bg-slate-200 mb-8"></div>
+
+                    <!-- 4. Opciones Finales -->
+                    <div class="mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 shadow-sm">
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block">4. Opciones Finales</label>
+                        <div class="flex items-center cursor-pointer group" onclick="toggleQuality()">
+                            <div id="checkQuality" class="w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors bg-slate-800 text-white">
+                                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span class="block text-sm font-bold text-slate-850 group-hover:text-slate-900 transition-colors">Alta Calidad (300 DPI)</span>
+                                <span class="block text-xs text-slate-500 font-medium mt-0.5">Mejora y preserva píxeles originales.</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center cursor-pointer group pt-1" onclick="toggleGuide()">
+                            <div id="checkGuide" class="w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors bg-slate-800 text-white">
+                                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span class="block text-sm font-bold text-slate-850 group-hover:text-slate-900 transition-colors">Añadir Guía (Mapa)</span>
+                                <span class="block text-xs text-slate-500 font-medium mt-0.5">Añade hoja extra con numeración.</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center cursor-pointer group pt-1" onclick="togglePageNumbers()">
+                            <div id="checkPageNumbers" class="w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors bg-white border-2 border-slate-300">
+                            </div>
+                            <div>
+                                <span class="block text-sm font-bold text-slate-850 group-hover:text-slate-900 transition-colors">Numerar Hojas</span>
+                                <span class="block text-xs text-slate-500 font-medium mt-0.5">Agrega el nº de página (tamaño 7) en cada corte.</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <button id="btnGenerate" class="w-full py-4 px-6 flex items-center justify-center space-x-3 rounded-2xl text-white font-bold text-lg transition-all duration-300 bg-slate-300 cursor-not-allowed text-slate-500" disabled>
+                    <i id="btnGenIcon" data-lucide="file-down" class="w-6 h-6"></i>
+                    <span id="btnGenText">Descargar Trabajo</span>
+                </button>
+
+            </div>
+
+            <!-- VISTA PREVIA (DERECHA) -->
+            <div class="lg:col-span-8 flex flex-col h-full min-h-[700px]">
+                <div class="flex flex-wrap items-center justify-between px-6 py-4 bg-white rounded-t-3xl border-b border-slate-200 shadow-sm gap-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center">
+                        <i data-lucide="maximize" class="w-5 h-5 mr-2 text-slate-600"></i> Lienzo de Previsualización
+                    </h2>
+                    <div id="previewToolbar" class="flex space-x-3 items-center hidden">
+                        <button onclick="startCropMode()" class="flex items-center text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl shadow-sm border border-slate-200 transition-colors">
+                            <i data-lucide="scissors" class="w-4 h-4 mr-2"></i> Recortar
+                        </button>
+                        <div class="text-sm font-bold bg-slate-800 text-white px-4 py-2 rounded-xl shadow-sm flex items-center">
+                            <i data-lucide="layout-grid" class="w-4 h-4 mr-2 opacity-80"></i>
+                            <span id="pageCountLabel">0</span>&nbsp;Hojas <span id="paperTypeLabel" class="ml-1 uppercase">A4</span>&nbsp;totales
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 bg-slate-900 rounded-b-3xl shadow-md overflow-hidden flex flex-col items-center justify-center p-6 relative border border-slate-800">
+                    <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 20px 20px;"></div>
+
+                    <!-- Estado Vacío -->
+                    <div id="emptyState" class="text-center flex flex-col items-center">
+                        <div class="w-24 h-24 rounded-3xl bg-slate-800 flex items-center justify-center mb-6 border border-slate-700">
+                            <i data-lucide="image" class="w-12 h-12 text-slate-500"></i>
+                        </div>
+                        <p class="text-xl font-bold text-slate-400">El lienzo está vacío</p>
+                        <p class="text-slate-500 mt-2 font-medium">Sube tus trabajos en el panel izquierdo</p>
+                    </div>
+
+                    <!-- Estado Requiere Tamaño -->
+                    <div id="sizeNeededState" class="flex items-center text-amber-500 bg-amber-500/10 border border-amber-500/20 px-6 py-4 rounded-2xl hidden z-10">
+                        <i data-lucide="alert-circle" class="w-6 h-6 mr-3"></i>
+                        <p class="text-base font-medium">Define las dimensiones para armar tu póster</p>
+                    </div>
+
+                    <!-- Contenedor del Canvas Principal -->
+                    <div id="mainCanvasArea" class="hidden flex-col items-center justify-center w-full h-full relative">
+                        
+                        <!-- Navegación Multiple -->
+                        <div id="multiNav" class="absolute top-0 left-0 right-0 flex justify-between px-6 z-20 pointer-events-none hidden">
+                            <button id="btnPrevImg" class="pointer-events-auto bg-slate-800/85 border border-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-750 disabled:opacity-20 transition-all group">
+                                <i data-lucide="chevron-left" class="w-6 h-6 text-white group-hover:-translate-x-0.5 transition-transform"></i>
+                            </button>
+                            <div class="bg-slate-800/85 border border-slate-700 px-5 py-2 rounded-full shadow-lg flex items-center">
+                                <span class="text-sm font-bold text-white tracking-widest"><span id="currImgIdx">1</span> <span class="text-slate-500 mx-1">/</span> <span id="totalImgCnt">1</span></span>
+                            </div>
+                            <button id="btnNextImg" class="pointer-events-auto bg-slate-800/85 border border-slate-700 p-3 rounded-full shadow-lg hover:bg-slate-750 disabled:opacity-20 transition-all group">
+                                <i data-lucide="chevron-right" class="w-6 h-6 text-white group-hover:translate-x-0.5 transition-transform"></i>
+                            </button>
+                        </div>
+
+                        <!-- Canvas de Previsualización Visual -->
+                        <div id="previewWrapper" class="relative bg-white shadow-2xl transition-all duration-500 ease-out overflow-hidden mt-12 w-full max-w-[850px]" style="max-height: calc(100% - 3rem);">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <div id="imageBox" class="relative bg-slate-100 overflow-hidden" style="width: 100%; height: 100%;">
+                                    <div class="absolute inset-0 opacity-15 bg-grid-pattern"></div>
+                                    <img id="previewImg" src="" alt="Vista previa" class="absolute w-full h-full object-center object-contain">
+                                </div>
+                            </div>
+                            <!-- Grid Overlay -->
+                            <div id="gridOverlay" class="absolute inset-0 grid pointer-events-none"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN SCRIPT -->
+    <script>
+        // Inicializar Iconos Lucide
+        lucide.createIcons();
+
+        // ESTADO GLOBAL
+        const state = {
+            images: [],
+            currentIndex: 0,
+            orientation: 'portrait',
+            paperSize: 'a4',
+            customPaperW: 21.0,
+            customPaperH: 29.7,
+            width: 0,
+            height: 0,
+            lockAspect: true,
+            imageFit: 'contain',
+            includeGuide: true,
+            highQuality: true,
+            includePageNumbers: false,
+            isGenerating: false
+        };
+
+        const PAPER_DIMENSIONS = {
+            a4: { w: 21.0, h: 29.7 },
+            a3: { w: 29.7, h: 42.0 },
+            a2: { w: 42.0, h: 59.4 },
+            a1: { w: 59.4, h: 84.1 },
+            a0: { w: 84.1, h: 118.9 }
+        };
+
+        // Utilidades
+        const getPaperW = () => {
+            const w = state.paperSize === 'custom' ? state.customPaperW : PAPER_DIMENSIONS[state.paperSize].w;
+            const h = state.paperSize === 'custom' ? state.customPaperH : PAPER_DIMENSIONS[state.paperSize].h;
+            return state.orientation === 'portrait' ? w : h;
+        };
+        const getPaperH = () => {
+            const w = state.paperSize === 'custom' ? state.customPaperW : PAPER_DIMENSIONS[state.paperSize].w;
+            const h = state.paperSize === 'custom' ? state.customPaperH : PAPER_DIMENSIONS[state.paperSize].h;
+            return state.orientation === 'portrait' ? h : w;
+        };
+        const getCurrImg = () => state.images[state.currentIndex] || null;
+
+        // Notificaciones
+        let notifTimer;
+        function showNotify(msg, type='info') {
+            const area = document.getElementById('notificationArea');
+            const box = document.getElementById('notificationBox');
+            const msgEl = document.getElementById('notifMessage');
+            const iconEl = document.getElementById('notifIcon');
+
+            msgEl.textContent = msg;
+            
+            box.className = 'flex items-center gap-3 px-6 py-4 rounded-xl shadow-xl border backdrop-blur-md text-sm font-semibold text-white ' +
+                (type === 'error' ? 'bg-red-600 border-red-500' : type === 'success' ? 'bg-emerald-600 border-emerald-500' : 'bg-slate-800 border-slate-700');
+            
+            iconEl.setAttribute('data-lucide', type === 'error' ? 'alert-circle' : type === 'success' ? 'check-circle' : 'info');
+            lucide.createIcons({ icons: { 'alert-circle': true, 'check-circle': true, 'info': true } });
+
+            area.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-4');
+            clearTimeout(notifTimer);
+            notifTimer = setTimeout(hideNotify, 5000);
+        }
+
+        function hideNotify() {
+            document.getElementById('notificationArea').classList.add('opacity-0', 'pointer-events-none', '-translate-y-4');
+        }
+
+        // Subida de Imágenes o PDFs
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if(files.length === 0) return;
+            
+            showNotify("Procesando archivos...", "info");
+            let newImages = [];
+
+            try {
+                for (let file of files) {
+                    if (file.type === 'application/pdf') {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                            const page = await pdf.getPage(pageNum);
+                            const viewport = page.getViewport({ scale: 2.0 }); // Escala alta para preservar calidad
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                            
+                            const url = canvas.toDataURL('image/png');
+                            const img = new Image();
+                            await new Promise(res => { img.onload = res; img.src = url; });
+                            newImages.push({ id: Math.random().toString(36).substr(2, 9), file, url, img, aspect: img.width / img.height });
+                        }
+                    } else if (file.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(file);
+                        const img = new Image();
+                        await new Promise(res => { img.onload = res; img.src = url; });
+                        newImages.push({ id: Math.random().toString(36).substr(2, 9), file, url, img, aspect: img.width / img.height });
+                    }
+                }
+
+                if (newImages.length > 0) {
+                    if (state.images.length === 0) {
+                        const first = newImages[0];
+                        const defaultWidth = 2 * getPaperW();
+                        state.width = Number(defaultWidth.toFixed(2));
+                        let aspect = first.aspect || 1;
+                        if (aspect < 0.1) aspect = 0.1;
+                        if (aspect > 10) aspect = 10;
+                        state.height = Number((defaultWidth / aspect).toFixed(2));
+                        if (state.height > 500) state.height = 500;
+                    }
+                    state.images.push(...newImages);
+                    updateUI();
+                    showNotify(`${newImages.length} página(s)/imagen(es) cargada(s).`, 'success');
+                }
+            } catch (error) {
+                console.error(error);
+                showNotify("Error al procesar el archivo.", "error");
+            }
+            e.target.value = ''; // Reset input
+        });
+
+        // Limpiar todo (Nuevo Trabajo)
+        function clearAll() {
+            state.images = [];
+            state.currentIndex = 0;
+            state.width = 0;
+            state.height = 0;
+            updateUI();
+            showNotify("Se han limpiado todas las imágenes. Listo para un nuevo trabajo.", "info");
+        }
+
+        function removeImg(idx) {
+            state.images.splice(idx, 1);
+            if(state.currentIndex >= state.images.length) {
+                state.currentIndex = Math.max(0, state.images.length - 1);
+            }
+            if(state.images.length === 0) {
+                state.width = 0; state.height = 0;
+            }
+            updateUI();
+        }
+
+        // Interfaz de Usuario y Eventos
+        function changePaperSize(size) {
+            state.paperSize = size;
+            const customDiv = document.getElementById('customPaperDimensions');
+            if (size === 'custom') {
+                customDiv.classList.remove('hidden');
+            } else {
+                customDiv.classList.add('hidden');
+            }
+            updateUI();
+        }
+
+        document.getElementById('customPaperWidth').addEventListener('input', (e) => {
+            state.customPaperW = parseFloat(e.target.value) || 1;
+            updateUI(false);
+        });
+
+        document.getElementById('customPaperHeight').addEventListener('input', (e) => {
+            state.customPaperH = parseFloat(e.target.value) || 1;
+            updateUI(false);
+        });
+
+        document.getElementById('btnPortrait').onclick = () => { state.orientation = 'portrait'; updateUI(); };
+        document.getElementById('btnLandscape').onclick = () => { state.orientation = 'landscape'; updateUI(); };
+        
+        document.getElementById('btnLockAspect').onclick = () => { 
+            state.lockAspect = !state.lockAspect; 
+            const icon = document.getElementById('lockIcon');
+            icon.setAttribute('data-lucide', state.lockAspect ? 'lock' : 'unlock');
+            document.getElementById('btnLockAspect').className = `p-2 rounded-xl transition-colors ${state.lockAspect ? 'bg-slate-200 text-slate-800' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+            lucide.createIcons();
+        };
+
+        const wInput = document.getElementById('inputWidth');
+        const hInput = document.getElementById('inputHeight');
+        
+        wInput.oninput = (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            if (val > 500) {
+                val = 500;
+                showNotify("El ancho máximo permitido es de 500 cm.", "info");
+            }
+            state.width = val;
+            if(state.lockAspect && getCurrImg()) {
+                state.height = Number((state.width / getCurrImg().aspect).toFixed(2));
+                if (state.height > 500) {
+                    state.height = 500;
+                    state.width = Number((state.height * getCurrImg().aspect).toFixed(2));
+                }
+            }
+            updateUI(false); // No actualizar inputs para no perder foco
+            hInput.value = state.height;
+            wInput.value = state.width;
+        };
+        hInput.oninput = (e) => {
+            let val = parseFloat(e.target.value) || 0;
+            if (val > 500) {
+                val = 500;
+                showNotify("El alto máximo permitido es de 500 cm.", "info");
+            }
+            state.height = val;
+            if(state.lockAspect && getCurrImg()) {
+                state.width = Number((state.height * getCurrImg().aspect).toFixed(2));
+                if (state.width > 500) {
+                    state.width = 500;
+                    state.height = Number((state.width / getCurrImg().aspect).toFixed(2));
+                }
+            }
+            updateUI(false);
+            wInput.value = state.width;
+            hInput.value = state.height;
+        };
+
+        document.getElementById('btnFitPages').onclick = () => {
+            if(!getCurrImg()) return showNotify("Sube una imagen primero.", "error");
+            let cols = parseInt(document.getElementById('customCols').value) || 1;
+            let rows = parseInt(document.getElementById('customRows').value) || 1;
+            if (cols > 15) {
+                cols = 15;
+                document.getElementById('customCols').value = 15;
+                showNotify("El número máximo de columnas horizontales es 15.", "info");
+            }
+            if (rows > 15) {
+                rows = 15;
+                document.getElementById('customRows').value = 15;
+                showNotify("El número máximo de filas verticales es 15.", "info");
+            }
+            state.width = cols * getPaperW();
+            state.height = rows * getPaperH();
+            updateUI();
+            showNotify(`Tamaño ajustado a ${cols * rows} hojas ${state.paperSize.toUpperCase()}.`, 'success');
+        };
+
+        function setFitMode(mode) {
+            state.imageFit = mode;
+            ['contain', 'cover', 'fill'].forEach(m => {
+                const btn = document.getElementById(m === 'contain' ? 'fitContain' : m === 'cover' ? 'fitCover' : 'fitFill');
+                if(m === mode) {
+                    btn.className = "fit-btn flex flex-col items-center py-2 rounded-lg text-xs font-bold transition-all bg-slate-850 text-slate-800 ring-1 ring-slate-300";
+                } else {
+                    btn.className = "fit-btn flex flex-col items-center py-2 rounded-lg text-xs font-bold transition-all text-slate-500 hover:text-slate-700";
+                }
+            });
+            updateUI();
+        }
+
+        // Opciones Finales
+        function toggleQuality() {
+            state.highQuality = !state.highQuality;
+            document.getElementById('checkQuality').className = `w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${state.highQuality ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`;
+            document.getElementById('checkQuality').innerHTML = state.highQuality ? '<i data-lucide="check-circle" class="w-4 h-4"></i>' : '';
+            lucide.createIcons();
+        }
+        function toggleGuide() {
+            state.includeGuide = !state.includeGuide;
+            document.getElementById('checkGuide').className = `w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${state.includeGuide ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`;
+            document.getElementById('checkGuide').innerHTML = state.includeGuide ? '<i data-lucide="check-circle" class="w-4 h-4"></i>' : '';
+            lucide.createIcons();
+        }
+        function togglePageNumbers() {
+            state.includePageNumbers = !state.includePageNumbers;
+            document.getElementById('checkPageNumbers').className = `w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${state.includePageNumbers ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`;
+            document.getElementById('checkPageNumbers').innerHTML = state.includePageNumbers ? '<i data-lucide="check-circle" class="w-4 h-4"></i>' : '';
+            lucide.createIcons();
+        }
+
+        // Navegación Multi Imagen
+        document.getElementById('btnPrevImg').onclick = () => { if(state.currentIndex > 0) { state.currentIndex--; updateUI(); } };
+        document.getElementById('btnNextImg').onclick = () => { if(state.currentIndex < state.images.length -1) { state.currentIndex++; updateUI(); } };
+
+        // RECORTE (CROP)
+        let cropState = { start: null, curr: null, dragging: false };
+        function startCropMode() {
+            if(!getCurrImg()) return;
+            cropState = { start: null, curr: null, dragging: false };
+            document.getElementById('cropTargetImg').src = getCurrImg().url;
+            document.getElementById('cropSelection').classList.add('hidden');
+            document.getElementById('cropModal').classList.remove('hidden');
+            document.getElementById('cropModal').classList.add('flex');
+        }
+        function closeCropMode() {
+            document.getElementById('cropModal').classList.add('hidden');
+            document.getElementById('cropModal').classList.remove('flex');
+        }
+        
+        const cropArea = document.getElementById('cropOverlayArea');
+        const getXY = (e) => {
+            const rect = cropArea.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+                y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+            };
+        };
+
+        const updateCropVisual = () => {
+            if(!cropState.start || !cropState.curr) return;
+            const sel = document.getElementById('cropSelection');
+            sel.classList.remove('hidden');
+            const x = Math.min(cropState.start.x, cropState.curr.x);
+            const y = Math.min(cropState.start.y, cropState.curr.y);
+            const w = Math.abs(cropState.curr.x - cropState.start.x);
+            const h = Math.abs(cropState.curr.y - cropState.start.y);
+            sel.style.left = `${x * 100}%`; sel.style.top = `${y * 100}%`;
+            sel.style.width = `${w * 100}%`; sel.style.height = `${h * 100}%`;
+        }
+
+        cropArea.addEventListener('mousedown', (e) => { cropState.dragging = true; cropState.start = getXY(e); cropState.curr = getXY(e); });
+        cropArea.addEventListener('touchstart', (e) => { cropState.dragging = true; cropState.start = getXY(e); cropState.curr = getXY(e); });
+        
+        const moveHandler = (e) => {
+            if(!cropState.dragging) return;
+            if(e.cancelable) e.preventDefault();
+            cropState.curr = getXY(e);
+            updateCropVisual();
+        };
+        cropArea.addEventListener('mousemove', moveHandler);
+        cropArea.addEventListener('touchmove', moveHandler, {passive: false});
+
+        const upHandler = () => { cropState.dragging = false; };
+        window.addEventListener('mouseup', upHandler);
+        window.addEventListener('touchend', upHandler);
+
+        function applyCrop() {
+            if(!cropState.start || !cropState.curr) return showNotify("Dibuja un rectángulo arrastrando sobre la imagen.", "error");
+            
+            const startX = Math.min(cropState.start.x, cropState.curr.x);
+            const startY = Math.min(cropState.start.y, cropState.curr.y);
+            const w = Math.abs(cropState.curr.x - cropState.start.x);
+            const h = Math.abs(cropState.curr.y - cropState.start.y);
+
+            if(w < 0.05 || h < 0.05) return showNotify("Área muy pequeña.", "error");
+
+            const img = getCurrImg().img;
+            const canvas = document.createElement('canvas');
+            const realX = startX * img.naturalWidth; const realY = startY * img.naturalHeight;
+            const realW = w * img.naturalWidth; const realH = h * img.naturalHeight;
+
+            canvas.width = realW; canvas.height = realH;
+            canvas.getContext('2d').drawImage(img, realX, realY, realW, realH, 0, 0, realW, realH);
+            
+            const newUrl = canvas.toDataURL('image/png', 1.0);
+            const newImg = new Image();
+            newImg.onload = () => {
+                state.images[state.currentIndex] = { ...getCurrImg(), url: newUrl, img: newImg, aspect: newImg.width/newImg.height };
+                if(state.lockAspect) state.height = Number((state.width / (newImg.width/newImg.height)).toFixed(2));
+                closeCropMode();
+                updateUI();
+                showNotify("Recorte aplicado.", "success");
+            };
+            newImg.src = newUrl;
+        }
+
+        // FUNCION PRINCIPAL DE ACTUALIZACION VISUAL
+        function updateUI(updateInputs = true) {
+            const hasImg = state.images.length > 0;
+            const panel = document.getElementById('optionsPanel');
+            const btnGen = document.getElementById('btnGenerate');
+            const btnClear = document.getElementById('btnClearAll');
+
+            if(hasImg) {
+                panel.classList.remove('opacity-40', 'grayscale', 'pointer-events-none');
+                btnClear.classList.remove('hidden');
+            } else {
+                panel.classList.add('opacity-40', 'grayscale', 'pointer-events-none');
+                btnClear.classList.add('hidden');
+            }
+
+            // Botones Orientación
+            document.getElementById('btnPortrait').className = `flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${state.orientation==='portrait'?'bg-white shadow-sm text-slate-800':'text-slate-500 hover:text-slate-700'}`;
+            document.getElementById('btnLandscape').className = `flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${state.orientation==='landscape'?'bg-white shadow-sm text-slate-800':'text-slate-500 hover:text-slate-700'}`;
+
+            if(updateInputs) {
+                wInput.value = state.width || '';
+                hInput.value = state.height || '';
+            }
+
+            // Actualizar Miniaturas
+            const thumbC = document.getElementById('thumbnailsContainer');
+            if(hasImg) {
+                thumbC.classList.remove('hidden');
+                thumbC.innerHTML = state.images.map((img, i) => `
+                    <div onclick="state.currentIndex=${i}; updateUI();" class="relative w-16 h-16 md:w-20 md:h-20 rounded-xl flex-shrink-0 cursor-pointer overflow-hidden transition-all duration-300 transform hover:scale-105 ${state.currentIndex===i?'ring-4 ring-slate-800 shadow-md z-10':'ring-1 ring-slate-200 opacity-70 hover:opacity-100'}">
+                        <img src="${img.url}" class="w-full h-full object-cover">
+                        <button onclick="removeImg(${i}); event.stopPropagation();" class="absolute top-1 right-1 bg-slate-800/90 text-white p-1 rounded-lg opacity-0 hover:opacity-100 hover:bg-red-600 transition-all shadow-sm">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                `).join('');
+                lucide.createIcons();
+            } else {
+                thumbC.classList.add('hidden');
+            }
+
+            // Actualizar Vista Previa (Canvas visual)
+            const emptyState = document.getElementById('emptyState');
+            const sizeState = document.getElementById('sizeNeededState');
+            const mainCanvas = document.getElementById('mainCanvasArea');
+            const toolbar = document.getElementById('previewToolbar');
+
+            if(!hasImg) {
+                emptyState.classList.remove('hidden');
+                sizeState.classList.add('hidden'); mainCanvas.classList.add('hidden'); toolbar.classList.add('hidden');
+                btnGen.className = "w-full py-4 px-6 flex items-center justify-center space-x-3 rounded-2xl text-white font-bold text-lg transition-all duration-300 bg-slate-300 cursor-not-allowed text-slate-500";
+                btnGen.disabled = true;
+            } else if (state.width <= 0 || state.height <= 0) {
+                sizeState.classList.remove('hidden');
+                emptyState.classList.add('hidden'); mainCanvas.classList.add('hidden'); toolbar.classList.add('hidden');
+                btnGen.className = "w-full py-4 px-6 flex items-center justify-center space-x-3 rounded-2xl text-white font-bold text-lg transition-all duration-300 bg-slate-300 cursor-not-allowed text-slate-500";
+                btnGen.disabled = true;
+            } else {
+                emptyState.classList.add('hidden'); sizeState.classList.add('hidden'); 
+                mainCanvas.classList.remove('hidden'); mainCanvas.classList.add('flex');
+                toolbar.classList.remove('hidden');
+
+                // Habilitar botón exportar
+                if(!state.isGenerating){
+                    btnGen.disabled = false;
+                    btnGen.className = "w-full py-4 px-6 flex items-center justify-center space-x-3 rounded-2xl text-white font-bold text-lg transition-all duration-300 bg-slate-800 hover:bg-slate-700 shadow-md hover:-translate-y-0.5 transform";
+                }
+
+                // Matematicas del Grid
+                const paperW = getPaperW(); const paperH = getPaperH();
+                const colsPreview = Math.ceil(state.width / paperW);
+                const rowsPreview = Math.ceil(state.height / paperH);
+                const totalP = colsPreview * rowsPreview;
+
+                document.getElementById('pageCountLabel').textContent = totalP;
+                document.getElementById('paperTypeLabel').textContent = state.paperSize === 'custom' ? 'PERS.' : state.paperSize;
+
+                // Nav Múltiple
+                const nav = document.getElementById('multiNav');
+                if(state.images.length > 1) {
+                    nav.classList.remove('hidden');
+                    document.getElementById('currImgIdx').textContent = state.currentIndex + 1;
+                    document.getElementById('totalImgCnt').textContent = state.images.length;
+                    document.getElementById('btnPrevImg').disabled = state.currentIndex === 0;
+                    document.getElementById('btnNextImg').disabled = state.currentIndex === state.images.length -1;
+                } else {
+                    nav.classList.add('hidden');
+                }
+
+                // Render Canvas Layout
+                const wrapper = document.getElementById('previewWrapper');
+                wrapper.style.aspectRatio = `${colsPreview * paperW} / ${rowsPreview * paperH}`;
+                
+                const imgBox = document.getElementById('imageBox');
+                imgBox.style.width = `${(state.width / (colsPreview * paperW)) * 100}%`;
+                imgBox.style.height = `${(state.height / (rowsPreview * paperH)) * 100}%`;
+                
+                const pImg = document.getElementById('previewImg');
+                pImg.src = getCurrImg().url;
+                pImg.style.objectFit = state.imageFit;
+
+                // Render Grid Cells
+                const gridOver = document.getElementById('gridOverlay');
+                gridOver.style.gridTemplateColumns = `repeat(${colsPreview}, 1fr)`;
+                gridOver.style.gridTemplateRows = `repeat(${rowsPreview}, 1fr)`;
+                gridOver.innerHTML = Array.from({length: totalP}).map((_, i) => `
+                    <div class="border border-slate-300 flex items-center justify-center relative">
+                        <div class="absolute top-[-2px] left-[-2px] w-1.5 h-1.5 border-t border-l border-slate-400 opacity-70"></div>
+                        <div class="absolute bottom-[-2px] right-[-2px] w-1.5 h-1.5 border-b border-r border-slate-400 opacity-70"></div>
+                        <span class="text-[10px] sm:text-xs font-bold text-slate-800 bg-white/95 border border-slate-250 px-2 py-0.5 rounded shadow-sm opacity-65">${i + 1}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // GENERADOR DE PDF
+        document.getElementById('btnGenerate').onclick = async () => {
+            if(state.images.length === 0 || state.width <= 0 || state.height <= 0) return;
+            if(!window.jspdf) return showNotify("Cargando motor PDF. Espera...", "info");
+
+            state.isGenerating = true;
+            const btn = document.getElementById('btnGenerate');
+            btn.className = "w-full py-4 px-6 flex items-center justify-center space-x-3 rounded-2xl text-white font-bold text-lg transition-all duration-300 bg-slate-500 cursor-wait shadow-inner";
+            
+            const btnIcon = document.getElementById('btnGenIcon');
+            const btnText = document.getElementById('btnGenText');
+            btnIcon.setAttribute('data-lucide', 'settings');
+            btnIcon.classList.add('animate-spin');
+            btnText.textContent = "Creando... 0/" + state.images.length;
+            lucide.createIcons();
+
+            setTimeout(async () => {
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const paperW = getPaperW(); const paperH = getPaperH();
+                    const cols = Math.ceil(state.width / paperW);
+                    const rows = Math.ceil(state.height / paperH);
+
+                    const totalPages = cols * rows * state.images.length;
+                    if (totalPages > 500) {
+                        showNotify(`Demasiadas páginas (${totalPages}). El límite máximo permitido es de 500 páginas en total.`, "error");
+                        throw new Error("Demasiadas páginas");
+                    }
+
+                    const gridW = cols * paperW; const gridH = rows * paperH;
+                    const offsetX = (gridW - state.width) / 2;
+                    const offsetY = (gridH - state.height) / 2;
+
+                    let formatParam = state.paperSize;
+                    if (state.paperSize === 'custom') {
+                        // Pasamos el ancho y alto base, jsPDF maneja la orientación internamente
+                        formatParam = [state.customPaperW, state.customPaperH];
+                    }
+
+                    const pdf = new jsPDF({ orientation: state.orientation, unit: 'cm', format: formatParam });
+                    
+                    const canvas = document.createElement('canvas');
+                    const DPI = state.highQuality ? 300 : 150; 
+                    const pxPerCm = DPI / 2.54;
+                    canvas.width = paperW * pxPerCm;
+                    canvas.height = paperH * pxPerCm;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+
+                    let isFirstPage = true;
+                    let imgCount = 0;
+
+                    for (let imgData of state.images) {
+                        imgCount++;
+                        btnText.textContent = `Creando... ${imgCount}/${state.images.length}`;
+
+                        // --- GUIA (MAPA) ---
+                        if (state.includeGuide) {
+                            if (!isFirstPage) pdf.addPage();
+                            isFirstPage = false;
+                            
+                            pdf.setTextColor(50, 50, 50);
+                            pdf.setFontSize(16);
+                            pdf.text(`Guía de Armado - Trabajo ${imgCount}`, paperW / 2, 1.5, { align: 'center' });
+                            
+                            const margin = 2; const availW = paperW - margin * 2; const availH = paperH - margin * 2 - 2;
+                            const scale = Math.min(availW / gridW, availH / gridH);
+                            const drawGridW = gridW * scale; const drawGridH = gridH * scale;
+                            
+                            const startX = margin + (availW - drawGridW) / 2;
+                            const startY = margin + 1.5 + (availH - drawGridH) / 2;
+
+                            const guideCanvas = document.createElement('canvas');
+                            const guidePxPerCm = 150 / 2.54;
+                            guideCanvas.width = drawGridW * guidePxPerCm; guideCanvas.height = drawGridH * guidePxPerCm;
+                            const gCtx = guideCanvas.getContext('2d');
+                            gCtx.imageSmoothingEnabled = true; gCtx.imageSmoothingQuality = 'high';
+                            
+                            gCtx.fillStyle = '#ffffff'; gCtx.fillRect(0, 0, guideCanvas.width, guideCanvas.height);
+                            gCtx.save(); gCtx.scale(guidePxPerCm, guidePxPerCm);
+                            
+                            const gOffsetX = offsetX * scale; const gOffsetY = offsetY * scale;
+                            const gWidth = state.width * scale; const gHeight = state.height * scale;
+
+                            let gDrawX = gOffsetX, gDrawY = gOffsetY, gDrawW = gWidth, gDrawH = gHeight;
+                            
+                            if (state.imageFit === 'contain' || state.imageFit === 'cover') {
+                                const aspectImg = imgData.aspect; const aspectBox = state.width / state.height;
+                                if (state.imageFit === 'contain') {
+                                    if (aspectImg > aspectBox) { gDrawW = gWidth; gDrawH = gWidth / aspectImg; gDrawY = gOffsetY + (gHeight - gDrawH) / 2; } 
+                                    else { gDrawH = gHeight; gDrawW = gHeight * aspectImg; gDrawX = gOffsetX + (gWidth - gDrawW) / 2; }
+                                } else {
+                                    if (aspectImg > aspectBox) { gDrawH = gHeight; gDrawW = gHeight * aspectImg; gDrawX = gOffsetX - (gDrawW - gWidth) / 2; } 
+                                    else { gDrawW = gWidth; gDrawH = gWidth / aspectImg; gDrawY = gOffsetY - (gDrawH - gHeight) / 2; }
+                                }
+                            }
+                            
+                            gCtx.beginPath(); gCtx.rect(gOffsetX, gOffsetY, gWidth, gHeight); gCtx.clip();
+                            gCtx.drawImage(imgData.img, gDrawX, gDrawY, gDrawW, gDrawH);
+                            
+                            gCtx.restore();
+                            pdf.addImage(guideCanvas.toDataURL('image/jpeg', 0.9), 'JPEG', startX, startY, drawGridW, drawGridH);
+
+                            pdf.setDrawColor(100, 116, 139); pdf.setLineWidth(0.05); pdf.setTextColor(100, 116, 139);
+                            
+                            let mapNum = 1;
+                            for (let r = 0; r < rows; r++) {
+                                for (let c = 0; c < cols; c++) {
+                                    const cellX = startX + c * (paperW * scale); const cellY = startY + r * (paperH * scale);
+                                    const cellW = paperW * scale; const cellH = paperH * scale;
+                                    pdf.rect(cellX, cellY, cellW, cellH);
+                                    pdf.setFillColor(255, 255, 255); pdf.circle(cellX + cellW / 2, cellY + cellH / 2, 0.45, 'F');
+                                    pdf.setFontSize(12); pdf.text(mapNum.toString(), cellX + cellW / 2, cellY + cellH / 2 + 0.15, { align: 'center' });
+                                    mapNum++;
+                                }
+                            }
+                        }
+
+                        // --- PEDAZOS ---
+                        let pieceNum = 1;
+                        for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                                if (!isFirstPage) pdf.addPage();
+                                isFirstPage = false;
+
+                                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                ctx.save(); ctx.scale(pxPerCm, pxPerCm); ctx.translate(-c * paperW, -r * paperH);
+
+                                let drawX = offsetX, drawY = offsetY, drawW = state.width, drawH = state.height;
+                                
+                                if (state.imageFit === 'contain' || state.imageFit === 'cover') {
+                                    const aspectImg = imgData.aspect; const aspectBox = state.width / state.height;
+                                    if (state.imageFit === 'contain') {
+                                        if (aspectImg > aspectBox) { drawW = state.width; drawH = state.width / aspectImg; drawY = offsetY + (state.height - drawH) / 2; } 
+                                        else { drawH = state.height; drawW = state.height * aspectImg; drawX = offsetX + (state.width - drawW) / 2; }
+                                    } else {
+                                        if (aspectImg > aspectBox) { drawH = state.height; drawW = state.height * aspectImg; drawX = offsetX - (drawW - state.width) / 2; } 
+                                        else { drawW = state.width; drawH = state.width / aspectImg; drawY = offsetY - (drawH - state.height) / 2; }
+                                    }
+                                }
+
+                                ctx.beginPath(); ctx.rect(offsetX, offsetY, state.width, state.height); ctx.clip();
+                                ctx.drawImage(imgData.img, drawX, drawY, drawW, drawH);
+
+                                ctx.restore();
+                                pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, paperW, paperH);
+
+                                // Agregar número de página si está activo
+                                if (state.includePageNumbers) {
+                                    pdf.setFontSize(7);
+                                    pdf.setTextColor(100, 116, 139); // Color gris pizarra
+                                    // Margen inferior derecho de 0.5 cm
+                                    pdf.text(pieceNum.toString(), paperW - 0.5, paperH - 0.5, { align: 'right' });
+                                }
+                                pieceNum++;
+                            }
+                        }
+                    }
+
+                    const fileName = state.images.length > 1 ? `trabajo-posters-${state.images.length}.pdf` : 'trabajo-poster.pdf';
+                    pdf.save(fileName);
+                    showNotify("¡Trabajo generado con éxito!", "success");
+                } catch (error) {
+                    console.error(error);
+                    if(error.message !== "Demasiadas páginas") showNotify("Error al procesar. Intenta imágenes más pequeñas.", "error");
+                } finally {
+                    state.isGenerating = false;
+                    btnIcon.setAttribute('data-lucide', 'file-down');
+                    btnIcon.classList.remove('animate-spin');
+                    btnText.textContent = "Descargar Trabajo";
+                    updateUI(false);
+                    lucide.createIcons();
+                }
+            }, 100);
+        };
+    </script>
+</body>
+</html>
